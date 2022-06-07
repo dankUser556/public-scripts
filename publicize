@@ -1,0 +1,56 @@
+#!/bin/bash
+PUBLIC_REPOSITORY=${HOME}/public-scripts
+
+if test ! -d ${PUBLIC_REPOSITORY}; then
+	CREATE_REPO=
+	while [ -z "$CREATE_REPO" ]; do
+		echo
+		read -p "public-script repository not found in ${HOME} directory. Create one now? (y/n): " CREATE_REPO
+		CREATE_REPO=${CREATE_REPO,,}
+	
+		case $CREATE_REPO in
+			y)
+				mkdir $PUBLIC_REPOSITORY
+				EXIT_LOOP=true
+				;;
+			n)
+				echo Cannot continue!
+				exit
+				;;
+			*)
+				echo response not recognized!
+				CREATE_REPO=
+				;;
+		esac
+	done
+fi
+
+if test ! -f ${1}; then
+	echo
+	echo ${1} does not appear to exist!
+	exit
+fi
+
+COPY_FILE=
+while [ -z "$COPY_FILE" ]; do
+	echo
+	read -p "Copy ${1} to public-scripts repository? (y/n): " COPY_FILE
+	COPY_FILE=${COPY_FILE,,}
+	case $COPY_FILE in
+		y)
+			cp ${1} ${HOME}/public-scripts
+			echo
+			exit
+			;;
+		n)
+			echo Action cancelled!
+			echo
+			exit
+			;;
+		*)
+			echo Response not recognized! Try again.
+			echo
+			COPY_FILE=
+			;;
+	esac
+done

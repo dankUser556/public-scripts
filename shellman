@@ -1,0 +1,139 @@
+#!/bin/bash
+#
+# ~Dank Shell Manager~
+#
+echo #Improve readability
+
+#Vars
+SHELLMAN_DIR=${HOME}/.local/share/shellman
+SHELL_STATUS=${SHELLMAN_DIR}/shellstatus
+SHELL_LOG=${SHELLMAN_DIR}/shellman.log
+
+
+#Initial shell status
+XSERVER_RUNNING=false
+SHELL_COUNT=0
+
+#Option flags
+SHELLMAN_DEBUG=false
+LOGIN=false
+LOGOUT=false
+REINITIALIZE=false
+
+#Functions
+function reinitializeStatus() {
+	echo Reinitializing Shell Status file.
+	echo XSERVER_RUNNING false > $SHELL_STATUS
+	echo SHELL_COUNT 0 >> $SHELL_STATUS
+}
+function shellLogin() {
+	echo "Logging in."
+	if test ${SHELL_COUNT} -eq 0; then
+		XSERVER_RUNNING=true
+		((SHELL_COUNT++))
+	else
+		((SHELL_COUNT++))
+	fi
+}
+function shellLogout() {
+	echo "Logging out."
+	if [ "$XSERVER_RUNNING" == true ] && [ "$SHELL_COUNT" == 1 ]; then
+		XSERVER_RUNNING=false;
+		SHELL_COUNT=0;
+	else
+		((SHELL_COUNT--))
+	fi
+	updateShellStatus
+}
+function updateShellStatus() {
+	echo "XSERVER_RUNNING" ${XSERVER_RUNNING} > ${SHELL_STATUS}
+	echo "SHELL_COUNT" ${SHELL_COUNT} >> ${SHELL_STATUS}
+}
+function debugShellman() {
+	if ! [ $SHELLMAN_DEBUG == false ]; then
+		echo "Debug function called"
+		echo
+		echo Internal Variables:
+		echo XSERVER_RUNNING ${XSERVER_RUNNING}
+		echo SHELL_COUNT ${SHELL_COUNT}
+	fi
+}
+function main() {
+	if [ "$REINITIALIZE" == true ]; then
+		reinitializeStatus;
+	fi
+	
+	if [ "$LOGIN" == true ] && [ "$LOGOUT" == true ]; then
+		echo "Choose to login or logout."
+		date >> $SHELL_LOG
+		echo "Attempted to login and logout in same call." >> $SHELL_LOG
+		echo && exit;
+	fi
+	
+	if [ "$LOGOUT" == true ]; then
+		shellLogout;
+	elif [ "$LOGIN" == true ]; then
+		shellLogin;
+	fi
+	
+	if [ "$SHELLMAN_DEBUG" == true ]; then
+		debugShellman;
+	fi;
+	
+	updateShellStatus;
+	echo && exit;
+}
+
+#Initialize config directory
+if test ! -d "${SHELLMAN_DIR}"; then
+	echo "Initializing config directory in ${HOME}/.local/share"
+	mkdir "${SHELLMAN_DIR}"
+fi
+
+#Import current shell status
+if ! test -e ${SHELL_STATUS}; then
+	echo "Initializing ${SHELL_STATUS} file."
+	touch ${SHELL_STATUS}
+	updateShellStatus
+else
+	echo "Importing current shell config."
+	XSERVER_RUNNING=$(awk '/XSERVER_RUNNING/ { print $2 }' ${SHELL_STATUS})
+	SHELL_COUNT=$(awk '/SHELL_COUNT/ { print $2 }' ${SHELL_STATUS})
+fi
+
+#Parse args
+if test ! $# -eq 0; then
+	for ARGUMENT in "$@"; do
+		case $ARGUMENT in
+			-d|--debug)
+				SHELLMAN_DEBUG=true
+				;;
+			-l|--login)
+				LOGIN=true
+				;;
+			-o|--logout)
+				LOGOUT=true
+				;;
+			-r|--reinitialize)
+				echo Reinit flag found
+				REINITIALIZE=true
+				;;
+			-v|--verbose)
+				VERBOSITY=true
+				;;
+			*)
+				date >> ${SHELL_LOG}
+				echo "Shellman called with unknown args!" >> ${SHELL_LOG}
+				echo && exit
+				;;
+		esac
+	done
+else
+	echo "No arguments passed. Exiting"
+	if [ ${SHELLMAN_DEBUG} == true ]; then
+		debugShellman
+	fi
+	echo && exit;
+fi
+
+main
