@@ -1,47 +1,84 @@
 #!/bin/bash
 #
 # ~Dank Shell Manager~
-#
-echo #Improve readability
+# 
 
-#Vars
+# Vars
 SHELLMAN_DIR=${HOME}/.local/share/shellman
 SHELL_STATUS=${SHELLMAN_DIR}/shellstatus
 SHELL_LOG=${SHELLMAN_DIR}/shellman.log
+PARENT_PROCESS_PID=$PPID
+PARENT_PROCESS=
 
-
-#Initial shell status
+# Initial shell status
 XSERVER_RUNNING=false
 SHELL_COUNT=0
 
-#Option flags
+# Option flags
 SHELLMAN_DEBUG=false
 LOGIN=false
 LOGOUT=false
 REINITIALIZE=false
+DISPLAY_STATUS=false
+REGISTER_XORG_INSTANCE=false
+REGISTER_XORG_HALT=false
+VERBOSITY=false
 
-#Functions
+# Identify parent process
+PARENT_PROCESS=$(awk ' $2 ~ parentPid { print $11 }	' parentPid="$PARENT_PROCESS_PID" <(ps -aux | grep $PARENT_PROCESS_PID))
+
+# Functions
+function logEntry() {
+	local LOG_MESSAGE=$@
+
+	date >> ${SHELL_LOG}	
+	echo ${LOG_MESSAGE[@]} >> ${SHELL_LOG}
+}
+function retrieveCurrentConfig() {
+	# Import current shell status
+	if ! test -e ${SHELL_STATUS}; then
+		echo "Initializing ${SHELL_STATUS} file."
+		touch ${SHELL_STATUS}
+		updateShellStatus
+	else
+		XSERVER_RUNNING=$(awk '/XSERVER_RUNNING/ { print $2 }' ${SHELL_STATUS})
+		SHELL_COUNT=$(awk '/SHELL_COUNT/ { print $2 }' ${SHELL_STATUS})
+	fi
+}
 function reinitializeStatus() {
-	echo Reinitializing Shell Status file.
+	date >> ${SHELL_LOG}
+	echo Reinitializing Shell Status file. >> ${SHELL_LOG}
 	echo XSERVER_RUNNING false > $SHELL_STATUS
 	echo SHELL_COUNT 0 >> $SHELL_STATUS
 }
-function shellLogin() {
-	echo "Logging in."
-	if test ${SHELL_COUNT} -eq 0; then
-		XSERVER_RUNNING=true
-		((SHELL_COUNT++))
+function registerXorgInstance() {
+	if [ "$XSERVER_RUNNING" == true ]; then
+		date >> $SHELL_LOG
+		echo registerXorgInstance function called when XSERVER_RUNNING = true! >> $SHELL_LOG
 	else
-		((SHELL_COUNT++))
+		XSERVER_RUNNING=true
 	fi
 }
+function registerXorgHalted() {
+	XSERVER_RUNNING=false
+	updateShellStatus
+}
+function shellLogin() {
+	local CALLER=$@
+	
+	((SHELL_COUNT++))
+	updateShellStatus
+	
+	logEntry "Login, called by: ${PARENT_PROCESS} PID: ${PARENT_PROCESS_PID}"
+}
 function shellLogout() {
-	echo "Logging out."
-	if [ "$XSERVER_RUNNING" == true ] && [ "$SHELL_COUNT" == 1 ]; then
-		XSERVER_RUNNING=false;
+	if [ "${SHELL_COUNT}" == 1 ]; then
 		SHELL_COUNT=0;
-	else
+	elif test ${SHELL_COUNT} -gt 0; then
 		((SHELL_COUNT--))
+	else
+		date >> $SHELL_LOG
+		echo "Logout called when SHELL_COUNT less than 1. Check shellman config." >> $SHELL_LOG
 	fi
 	updateShellStatus
 }
@@ -62,7 +99,7 @@ function main() {
 	if [ "$REINITIALIZE" == true ]; then
 		reinitializeStatus;
 	fi
-	
+	retrieveCurrentConfig
 	if [ "$LOGIN" == true ] && [ "$LOGOUT" == true ]; then
 		echo "Choose to login or logout."
 		date >> $SHELL_LOG
@@ -73,15 +110,19 @@ function main() {
 	if [ "$LOGOUT" == true ]; then
 		shellLogout;
 	elif [ "$LOGIN" == true ]; then
-		shellLogin;
+		shellLogin $0;
 	fi
-	
+	if [ "$REGISTER_XORG_INSTANCE" == true ]; then
+		registerXorgInstance
+	elif [ "$REGISTER_XORG_HALT" == true ]; then
+		registerXorgHalted
+	fi
 	if [ "$SHELLMAN_DEBUG" == true ]; then
 		debugShellman;
 	fi;
 	
 	updateShellStatus;
-	echo && exit;
+	exit;
 }
 
 #Initialize config directory
@@ -90,23 +131,26 @@ if test ! -d "${SHELLMAN_DIR}"; then
 	mkdir "${SHELLMAN_DIR}"
 fi
 
-#Import current shell status
-if ! test -e ${SHELL_STATUS}; then
-	echo "Initializing ${SHELL_STATUS} file."
-	touch ${SHELL_STATUS}
-	updateShellStatus
-else
-	echo "Importing current shell config."
-	XSERVER_RUNNING=$(awk '/XSERVER_RUNNING/ { print $2 }' ${SHELL_STATUS})
-	SHELL_COUNT=$(awk '/SHELL_COUNT/ { print $2 }' ${SHELL_STATUS})
-fi
-
 #Parse args
 if test ! $# -eq 0; then
 	for ARGUMENT in "$@"; do
 		case $ARGUMENT in
+			-s|--status)
+				retrieveCurrentConfig
+				echo "Current shellman status:"
+				echo "XSERVER_RUNNING: ${XSERVER_RUNNING}"
+				echo "SHELL_COUNT: ${SHELL_COUNT}"
+				echo
+				exit
+				;;
 			-d|--debug)
 				SHELLMAN_DEBUG=true
+				;;
+			-x|--registerxorg)
+				REGISTER_XORG_INSTANCE=true
+				;;
+			-h|--)
+				REGISTER_XORG_HALT=true
 				;;
 			-l|--login)
 				LOGIN=true
@@ -129,7 +173,8 @@ if test ! $# -eq 0; then
 		esac
 	done
 else
-	echo "No arguments passed. Exiting"
+	date >> ${SHELL_LOG}
+	echo "No arguments passed. Exiting" >> ${SHELL_LOG}
 	if [ ${SHELLMAN_DEBUG} == true ]; then
 		debugShellman
 	fi
