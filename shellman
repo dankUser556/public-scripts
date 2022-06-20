@@ -5,7 +5,8 @@
 
 # Vars
 SHELLMAN_DIR=${HOME}/.local/share/shellman
-SHELL_STATUS=${SHELLMAN_DIR}/shellstatus
+SHELL_STATUS=/home/dan/.local/share/shellman/shellstatus
+# SHELL_STATUS=${SHELLMAN_DIR}/shellstatus
 SHELL_LOG=${SHELLMAN_DIR}/shellman.log
 PARENT_PROCESS_PID=$PPID
 PARENT_PROCESS=
@@ -25,7 +26,7 @@ REGISTER_XORG_HALT=false
 VERBOSITY=false
 
 # Identify parent process
-PARENT_PROCESS=$(awk ' $2 ~ parentPid { print $11 }	' parentPid="$PARENT_PROCESS_PID" <(ps -aux | grep $PARENT_PROCESS_PID))
+PARENT_PROCESS=$(awk ' $2 ~ parentPid { print $11 } ' parentPid="$PARENT_PROCESS_PID" <(ps -aux | grep $PARENT_PROCESS_PID))
 
 # Functions
 function logEntry() {
