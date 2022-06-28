@@ -1,19 +1,26 @@
 #!/bin/bash
+
 #
 # ~Dank Shell Manager~
 # 
 
+# Configuration, set SHELL_USER to the user's name (So we don't confuse systemd)
+SHELL_USER="dan"
+MAX_LOG_ENTRIES=50
+
 # Vars
-SHELLMAN_DIR=${HOME}/.local/share/shellman
-SHELL_STATUS=/home/dan/.local/share/shellman/shellstatus
-# SHELL_STATUS=${SHELLMAN_DIR}/shellstatus
+SHELLMAN_DIR=/home/"${SHELL_USER}"/.local/share/shellman
+SHELL_STATUS=${SHELLMAN_DIR}/shellstatus
 SHELL_LOG=${SHELLMAN_DIR}/shellman.log
+CURRENT_USER=$USER
 PARENT_PROCESS_PID=$PPID
 PARENT_PROCESS=
+TRACKED_SHELL=$SHELL
 
 # Initial shell status
 XSERVER_RUNNING=false
 SHELL_COUNT=0
+LOG_ENTRIES=0
 
 # Option flags
 SHELLMAN_DEBUG=false
@@ -29,9 +36,18 @@ VERBOSITY=false
 PARENT_PROCESS=$(awk ' $2 ~ parentPid { print $11 } ' parentPid="$PARENT_PROCESS_PID" <(ps -aux | grep $PARENT_PROCESS_PID))
 
 # Functions
+function displayLog() {
+	cat ${SHELL_LOG} | less
+}
 function logEntry() {
 	local LOG_MESSAGE=$@
 
+	if [[ "$LOG_ENTRIES" -gt "$MAX_LOG_ENTRIES" ]]; then
+		echo > ${SHELL_LOG}
+		LOG_ENTRIES=0
+	fi
+	
+	((LOG_ENTRIES++))
 	date >> ${SHELL_LOG}	
 	echo ${LOG_MESSAGE[@]} >> ${SHELL_LOG}
 }
@@ -44,25 +60,39 @@ function retrieveCurrentConfig() {
 	else
 		XSERVER_RUNNING=$(awk '/XSERVER_RUNNING/ { print $2 }' ${SHELL_STATUS})
 		SHELL_COUNT=$(awk '/SHELL_COUNT/ { print $2 }' ${SHELL_STATUS})
+		LOG_ENTRIES=$(awk '/LOG_ENTRIES/ { print $2 }' ${SHELL_STATUS})
 	fi
 }
+function displayCurrentConfig() {
+	echo "Current shellman status:"
+	echo "XSERVER_RUNNING: ${XSERVER_RUNNING}"
+	echo "SHELL_COUNT: ${SHELL_COUNT}"
+	echo "LOG_ENTRIES: ${LOG_ENTRIES}"
+	echo
+}
 function reinitializeStatus() {
-	date >> ${SHELL_LOG}
-	echo Reinitializing Shell Status file. >> ${SHELL_LOG}
-	echo XSERVER_RUNNING false > $SHELL_STATUS
-	echo SHELL_COUNT 0 >> $SHELL_STATUS
+	logEntry "Reinitializing Shell Status file."
+	printf "XSERVER_RUNNING false\n" > $SHELL_STATUS
+	printf "SHELL_COUNT 0\n" >> $SHELL_STATUS
+	if [ -z ${LOG_ENTRIES} ]; then
+		LOG_ENTRIES=0
+	fi
+	printf "LOG_ENTRIES %s\n", ${LOG_ENTRIES} >> $SHELL_STATUS
 }
 function registerXorgInstance() {
 	if [ "$XSERVER_RUNNING" == true ]; then
-		date >> $SHELL_LOG
-		echo registerXorgInstance function called when XSERVER_RUNNING = true! >> $SHELL_LOG
+		 logEntry "registerXorgInstance function called when XSERVER_RUNNING == true!"
 	else
 		XSERVER_RUNNING=true
+		logEntry "Registered Xorg Instance"
 	fi
 }
 function registerXorgHalted() {
+	if [ "$XSERVER_RUNNING" == false ]; then
+		logEntry "registerXorgHalted called while XSERVER_RUNNING == false!"
+	fi
 	XSERVER_RUNNING=false
-	updateShellStatus
+	logEntry "Registered Xorg halt"
 }
 function shellLogin() {
 	local CALLER=$@
@@ -74,18 +104,20 @@ function shellLogin() {
 }
 function shellLogout() {
 	if [ "${SHELL_COUNT}" == 1 ]; then
+		registerXorgHalted
 		SHELL_COUNT=0;
 	elif test ${SHELL_COUNT} -gt 0; then
 		((SHELL_COUNT--))
 	else
-		date >> $SHELL_LOG
-		echo "Logout called when SHELL_COUNT less than 1. Check shellman config." >> $SHELL_LOG
+		logEntry "Logout called when SHELL_COUNT less than 1. Check shellman config."
 	fi
 	updateShellStatus
+	logEntry "Logout called"
 }
 function updateShellStatus() {
 	echo "XSERVER_RUNNING" ${XSERVER_RUNNING} > ${SHELL_STATUS}
 	echo "SHELL_COUNT" ${SHELL_COUNT} >> ${SHELL_STATUS}
+	echo "LOG_ENTRIES" ${LOG_ENTRIES} >> ${SHELL_STATUS}
 }
 function debugShellman() {
 	if ! [ $SHELLMAN_DEBUG == false ]; then
@@ -96,15 +128,17 @@ function debugShellman() {
 		echo SHELL_COUNT ${SHELL_COUNT}
 	fi
 }
+function determineShellCount() {
+	local DETERMINED_SHELL_COUNT=$(awk ' BEGIN { determinedCount=0 } $2 ~ parentPid { if ( ! /xfce/ ) { determinedCount++ } else { if ( $2 > parentPid ) { doNothing++ } } } END { print determinedCount } ' parentPid="$PARENT_PROCESS_PID" <(ps -aux | grep bash))
+	logEntry "determineShellCount returned: $DETERMINED_SHELL_COUNT"
+}
 function main() {
 	if [ "$REINITIALIZE" == true ]; then
 		reinitializeStatus;
 	fi
 	retrieveCurrentConfig
 	if [ "$LOGIN" == true ] && [ "$LOGOUT" == true ]; then
-		echo "Choose to login or logout."
-		date >> $SHELL_LOG
-		echo "Attempted to login and logout in same call." >> $SHELL_LOG
+		logEntry "Attempted to login and logout in same call."
 		echo && exit;
 	fi
 	
@@ -123,6 +157,7 @@ function main() {
 	fi;
 	
 	updateShellStatus;
+	determineShellCount;
 	exit;
 }
 
@@ -138,10 +173,8 @@ if test ! $# -eq 0; then
 		case $ARGUMENT in
 			-s|--status)
 				retrieveCurrentConfig
-				echo "Current shellman status:"
-				echo "XSERVER_RUNNING: ${XSERVER_RUNNING}"
-				echo "SHELL_COUNT: ${SHELL_COUNT}"
-				echo
+				determineShellCount
+				displayCurrentConfig
 				exit
 				;;
 			-d|--debug)
@@ -160,22 +193,26 @@ if test ! $# -eq 0; then
 				LOGOUT=true
 				;;
 			-r|--reinitialize)
-				echo Reinit flag found
 				REINITIALIZE=true
+				;;
+			--sysd)
+				logEntry "Called with --sysd argument"
 				;;
 			-v|--verbose)
 				VERBOSITY=true
 				;;
+			--display-log)
+				displayLog
+				exit
+				;;
 			*)
-				date >> ${SHELL_LOG}
-				echo "Shellman called with unknown args!" >> ${SHELL_LOG}
+				logEntry "Shellman called with unknown args!"
 				echo && exit
 				;;
 		esac
 	done
 else
-	date >> ${SHELL_LOG}
-	echo "No arguments passed. Exiting" >> ${SHELL_LOG}
+	logEntry "No arguments passed. Exiting"
 	if [ ${SHELLMAN_DEBUG} == true ]; then
 		debugShellman
 	fi
