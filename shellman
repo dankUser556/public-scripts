@@ -4,18 +4,32 @@
 # ~Dank Shell Manager~
 # 
 
+# XDG style configuration (Work In Progress)
+if [ -z $XDG_STATE_HOME ];then USE_XDG_CONFIG=true; else USE_XDG_CONFIG=false; fi;
+
 # Configuration, set SHELL_USER to the user's name (So we don't confuse systemd)
 SHELL_USER="dan"
 MAX_LOG_ENTRIES=50
 
 # Vars
-SHELLMAN_DIR=/home/"${SHELL_USER}"/.local/share/shellman
-SHELL_STATUS=${SHELLMAN_DIR}/shellstatus
-SHELL_LOG=${SHELLMAN_DIR}/shellman.log
-CURRENT_USER=$USER
-PARENT_PROCESS_PID=$PPID
-PARENT_PROCESS=
-TRACKED_SHELL=$SHELL
+
+USE_XDG_CONFIG=false	# temporarily negate xdg checking until feature completed
+
+if [ $USE_XDG_CONFIG == false ]; then
+	SHELLMAN_DIR=/home/"${SHELL_USER}"/.local/share/shellman
+	SHELL_STATUS=${SHELLMAN_DIR}/shellstatus
+	SHELL_LOG=${SHELLMAN_DIR}/shellman.log
+	CURRENT_USER=$USER
+	PARENT_PROCESS_PID=$PPID
+	PARENT_PROCESS=
+	TRACKED_SHELL=$SHELL
+else
+	# set XDG style config
+	echo USE_XDG_CONFIG set to true, but not implemented!!
+	echo Exiting.
+	exit
+fi
+
 
 # Initial shell status
 XSERVER_RUNNING=false
