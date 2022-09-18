@@ -1,0 +1,84 @@
+#!/bin/bash
+
+#
+# Simple system-wide update script
+#
+
+# CMD Macros
+pac_update() { sudo pacman -Syyu --noconfirm; };
+update_chrome() { chrome-update; };
+	
+# Location and File aliases
+LOG_DIR="${HOME}/.log";
+CHROME_PACKAGE_DIR="${HOME}/.packages/google-chrome";
+LOG_FILE="${LOG_DIR}/system-update.log";
+CHROME_STATUS="${CHROME_PACKAGE_DIR}/update_available";
+
+# Flags
+date_logged=false
+
+function logUpdate() {
+	local called_by="$1";
+	local log_message="$2";
+
+	[ ! -d "$LOG_DIR" ] && mkdir $LOG_DIR;	# Create log directory if necessary
+	if [ "$date_logged" == false ]; then date_logged=true; date >> $LOG_FILE; fi;
+	echo "$log_message" >> $LOG_FILE;
+
+	return 0;
+}
+function checkConnectivity() {
+	local connection_active=false;	
+	local ping_timeout=0;
+
+	while [ "$ping_timeout" -lt 5 ]; do
+		ping -c 1 archwiki.org > /dev/null 2>&1 && \
+			connection_active=true || \
+			connection_active=false;
+
+		if [ "$connection_active" == false ]; then
+			((ping_timeout++));
+			# printf "Connection timed out (%i/5)\n" ${ping_timeout};
+		else
+			printf "\nActive internet connection found.\n";
+			return 0;
+		fi;
+	done;
+	echo Check internet connectivity!;
+
+	return 1;
+};
+function packageUpdate() {
+	pac_update;
+	logUpdate "packageUpdate" "pacman update performed";
+
+	return 0;
+};
+function updateChrome() {
+	logUpdate "updateChrome" "calling update-chrome script from path";
+	update_chrome || return 1;
+
+	return 0;
+};
+function main() {
+	logUpdate "main" "system-update script has been called.";
+
+	printf "\n(1/4) Checking for active internet connection.\n\n";
+	checkConnectivity || exit 1;
+
+	printf "\n(2/4) Updating binary packages.\n\n";
+	packageUpdate;
+	
+	printf "\n(3/4) Running chrome update script\n\n"
+	update-chrome;
+
+	printf "\n(4/4) Updating local repo clones and checking active repo statuses.\n\n";
+	repo-statuses;
+
+	echo "System update has completed with no detectable errors!";
+
+	return 0;
+};
+
+main;
+exit 0;
