@@ -1,0 +1,133 @@
+#!/bin/bash
+
+#
+# Dank general Backlight Utility
+#
+
+#
+# Notes: Use a flag to call displayCurrentValue instead of as part of arg parsing
+# to avoid argument ordering issues.
+#
+
+# CMD Macro
+argument_error() { echo "Unrecognized argument: $1"; echo "Try passing --help."; exit 1; };
+
+# File and Directory aliases
+BRIGHTNESS_FILE="/sys/class/backlight/intel_backlight/brightness";
+
+# Data
+ACTUAL_BRIGHTNESS_RANGE=(0 6000);
+EASY_BRIGHTNES_RANGE=(0 10);
+TARGET_VALUE=;
+
+# Flags
+USE_ACTUAL_VALUE=false;
+
+function throwError() {
+	local ERROR_TYPE="$1"
+
+	case "$ERROR_TYPE" in
+		argument_count)
+			echo "No argument supplied. Try --help.";
+			exit 2;;
+		non_integer_argument)
+			echo "Non integer argument supplied.";
+			exit 2;;
+		zero_brightness)
+			echo "Brightness cannot be set to zero.";
+			exit 5;;
+		brightness_above_range)
+			echo "Simple brightness value must be 1 - 10.";
+			exit 5;;
+		*)
+			echo "Unknown Error.";
+			exit 1;;
+	esac;
+}
+function displayHelp() {
+	echo displayHelp called.;
+	exit "$1";
+};
+function assertIntegerArgument() {
+	local arg_value="$1";
+	
+	if [[ "$arg_value" == +([0-9]) ]]; then
+		return 0;
+	fi;
+	echo "$arg_value did not pass integer assertion."
+	return 1;
+};
+function convertSimpleValue() {
+	local desired_brightness="$TARGET_VALUE";
+
+	if [ "$desired_brightness" == 0 ]; then
+		throwError "zero_brightness";
+	elif [ "$desired_brightness" -gt 10 ]; then
+		echo $desired_brightness
+		throwError "brightness_above_range";
+	else
+		TARGET_VALUE=$(( $desired_brightness * 600 ));
+	fi;
+};
+function setBrightnessValue() {
+	if [ -z "$TARGET_VALUE" ]; then
+		echo No brightness value supplied.;
+		displayHelp "1";
+		exit 1;
+	fi;
+
+	echo "$TARGET_VALUE" > "$BRIGHTNESS_FILE";
+
+	return 0;
+};
+function convertActualValue() {
+	local actual_value=$1
+
+	echo $(( "$actual_value" / 600 ));
+	return 0;
+}
+function displayCurrentValue() {
+	local brightness_value=$(cat $BRIGHTNESS_FILE);
+	local simple_value=$(convertActualValue "$brightness_value");
+
+	printf "Current backlight value: ";
+	if [ "$USE_ACTUAL_VALUE" == true ]; then
+		printf "$brightness_value\n";
+		return 0;
+	fi;
+
+	printf "$simple_value\n";
+	return 0;
+};
+function main() {
+	# Determine argument count
+	if [ ${#@} -eq 0 ]; then throwError "argument_count"; fi;
+
+	# Parse arguments
+	for argument in ${@}; do
+		case $argument in 
+			-a|--actual-value) 
+				USE_ACTUAL_VALUE=true;;
+			-c|--current-value)
+				displayCurrentValue;
+				exit 0;;
+			--help) 
+				displayHelp;
+				exit 1;;
+			*)
+				assertIntegerArgument "$argument" && \
+				       	TARGET_VALUE="$argument" || \
+					throwError "non_integer_argument";;
+		esac;	
+	done;
+
+	# Determine value type to use (actual or 'easy')
+	[ "$USE_ACTUAL_VALUE" == false ] && convertSimpleValue;
+	
+	# Set brightness value
+	setBrightnessValue "$TARGET_VALUE";
+        return 0;	
+};
+
+main ${@};
+exit 0;
