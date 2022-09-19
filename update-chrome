@@ -1,0 +1,105 @@
+#!/bin/bash
+
+#
+# Dank Chrome updater
+#
+
+# CMD Macros
+get_time() { CURRENT_TIME=$(awk '{ print $4 " " $5 }' <(date)); };
+
+# Paths
+PACKAGE_DIR=${HOME}/.packages/google-chrome;
+LOG_DIR=${HOME}/.log;
+CURRENT_DIR=$(pwd);
+
+# Files
+LOG_FILE=${LOG_DIR}/update-chrome.log;
+
+# Flags
+UPDATE_AVAILABLE=;
+LOG_OPEN=false;
+
+# Variables
+CURRENT_VERSION=;
+CURRENT_TIME=;
+
+# imported vars from original script
+CHANNEL=;
+PKG=;
+VER=;
+
+function logAction() {
+	local CALLER="$1";
+	local MESSAGE="$2";
+
+	if [ "$LOG_OPEN" == false ]; then
+		LOG_OPEN=true;
+		echo >> $LOG_FILE && date >> $LOG_FILE;
+	fi;
+	get_time;
+	printf " %s %s %s: " $CURRENT_TIME $CALLER >> $LOG_FILE;
+	echo $MESSAGE >> $LOG_FILE;
+	return 0;
+}
+function fetchInfo() {
+	logAction fetchInfo "fetchInfo called."
+	CHANNEL=$(awk -F '=' '/^_channel/{ print $2 }' PKGBUILD);
+	PKG="google-chrome-${CHANNEL}";
+	VER=$(curl -sSf https://dl.google.com/linux/chrome/deb/dists/stable/main/binary-amd64/Packages |
+		grep -A1 "Package: ${PKG}" |
+		awk '/Version/{print $2}' |
+		cut -d '-' -f1);
+	return 0;	
+}
+function checkVersion() {
+	logAction checkVersion "checkVersion called."
+	# store current version, check against available
+	sed -i \
+		-e "s/^pkgver=.*/pkgver=${VER}/" \
+		PKGBUILD
+	if (git diff --exit-code PKGBUILD); then
+		UPDATE_AVAILABLE=false;
+	else
+		UPDATE_AVAILABLE=true;
+	fi;
+	return 0;
+}
+function updatePackage() {
+	logAction updatePackage "updatePackage function called."
+
+	sed -i \
+		-e 's/pkgrel=.*/pkgrel=1/' \
+		PKGBUILD
+	updpkgsums
+	makepkg --printsrcinfo >.SRCINFO
+	git add PKGBUILD .SRCINFO
+	git commit -m "${PKG} v${VER}"
+
+	return 0;
+}
+function main() {
+	logAction main "Update script called";
+	
+	echo "Checking for chrome updates...";
+	cd $PACKAGE_DIR;
+	
+	fetchInfo;
+	checkVersion;
+
+	if [ "$UPDATE_AVAILABLE" == true ]; then
+		updatePackage
+		aurmk
+		echo "Chrome has been updated to the latest version. Check log directory for more info."
+		logAction main "Chrome has been updated."
+	else
+		echo "Chrome is currently up to date: version ${VER}"
+		echo "Check log for more info."
+		logAction main "Chrome has not been updated."
+	fi;
+	
+	cd $CURRENT_DIR	
+	return 0;
+}
+
+main;
+exit 0;
