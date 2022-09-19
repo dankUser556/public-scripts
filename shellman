@@ -13,7 +13,7 @@ MAX_LOG_ENTRIES=50
 
 # Vars
 
-USE_XDG_CONFIG=false	# temporarily negate xdg checking until feature completed
+USE_XDG_CONFIG=false	# temporarily negate XDG configuration until feature completed
 
 if [ $USE_XDG_CONFIG == false ]; then
 	SHELLMAN_DIR=/home/"${SHELL_USER}"/.local/share/shellman
@@ -23,8 +23,7 @@ if [ $USE_XDG_CONFIG == false ]; then
 	PARENT_PROCESS_PID=$PPID
 	PARENT_PROCESS=
 	TRACKED_SHELL=$SHELL
-else
-	# set XDG style config
+else							# set XDG style config
 	echo USE_XDG_CONFIG set to true, but not implemented!!
 	echo Exiting.
 	exit
