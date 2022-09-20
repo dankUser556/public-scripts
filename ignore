@@ -1,0 +1,95 @@
+#!/bin/bash
+
+CURRENT_DIR=$(pwd);
+NASCENT_IGNORE=false;
+FINAL_QUEUE=();
+
+function displayHelp() {
+	echo Usage: ignore [FILES]
+	echo "Asserts that file(s) exist(s), then adds to .gitignore if not already present."
+
+	return 0;
+};
+function handleError() {
+	local error_label="$1";
+	local message="$2";
+
+	case "$error_label" in
+		no_args)
+			echo "No arguments supplied.";
+			displayHelp;
+			exit 2;;
+		file_not_found)
+			echo "File ${message} not found.";
+			return 1;;
+		*)
+			echo Unknown Error!;
+			exit 1;;
+	esac
+	return 0;
+};
+function removeDuplicates() {
+	local queue="${@}";
+	local final_index=0;
+	for item in ${queue[@]}; do
+		duplicate_found=false;
+		while read file_entry; do
+			if [ "$file_entry" == "$item" ]; then 
+				duplicate_found=true;
+				echo $file_entry already present in .gitignore.
+			fi;
+		done <.gitignore
+		if [ "$duplicate_found" == false ]; then
+			FINAL_QUEUE[$final_index]=$item
+			((final_index++))
+		fi
+	done;
+
+	return 0;
+};
+function addNewEntries() {
+	local queue=${@};
+	if [ $NASCENT_IGNORE == false ]; then removeDuplicates "${queue[@]}"; fi;
+	if [ ! "${#FINAL_QUEUE}" -eq 0 ]; then
+		for entry in ${FINAL_QUEUE[@]}; do
+			echo "Adding $entry to .gitignore."
+			echo "$entry" >> .gitignore
+		done;
+	else
+		return 1;
+	fi;
+
+	return 0;
+};
+function main() {
+	local entry_queue=();
+	local queue_index=0;
+
+	# Parse arguments
+	if [ ${#@} -eq 0 ]; then handleError "no_args";	fi;
+	
+	for arg in ${@}; do
+		case $arg in
+			*)
+		       		if [ -e "$arg" ]; then
+					entry_queue[$queue_index]="$arg";
+					((queue_index++));
+				else
+					handleError "file_not_found" "$arg";
+				fi;;
+		esac;
+	done;
+	
+	# Assert directory has .gitignore file already
+	if [ ! -e ".gitignore" ]; then 
+		touch .gitignore; 
+		NASCENT_IGNORE=true;
+	fi;
+
+	addNewEntries ${entry_queue[@]} || echo No entries added.;
+
+	return 0;		
+};
+
+main ${@};
+exit 0;
